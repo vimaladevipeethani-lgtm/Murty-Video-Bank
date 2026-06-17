@@ -124,7 +124,26 @@ export async function uploadVideoToStorage(videoId: string, blob: Blob): Promise
     return downloadUrl;
   } catch (error) {
     console.error("Firebase Storage upload failed:", error);
-    throw new Error(`Failed to upload video to cloud storage: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    // Provide detailed error messages based on error type
+    let errorMessage = 'Unknown error uploading to Firebase Storage';
+    if (error instanceof Error) {
+      if (error.message.includes('permission-denied')) {
+        errorMessage = 'Permission denied: You do not have access to upload videos. Please check Firebase Storage rules or sign in.';
+      } else if (error.message.includes('authentication-required')) {
+        errorMessage = 'Authentication required: Please sign in to upload videos.';
+      } else if (error.message.includes('not-authorized')) {
+        errorMessage = 'Not authorized to upload videos. Please contact the administrator.';
+      } else if (error.message.includes('unauthenticated')) {
+        errorMessage = 'Please sign in to upload videos.';
+      } else if (error.message.includes('bucket-not-found')) {
+        errorMessage = 'Firebase Storage bucket not configured. Please contact support.';
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
+    throw new Error(errorMessage);
   }
 }
 

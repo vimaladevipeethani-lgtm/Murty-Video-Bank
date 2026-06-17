@@ -276,8 +276,10 @@ export default function App() {
         storageUrl = await storeVideoBlob(videoId, file);
         console.log("Video uploaded to Firebase Storage:", storageUrl);
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error uploading to Firebase Storage';
         console.error("Failed to upload video to cloud storage:", err);
-        triggerToast("Warning: Video uploaded but cloud storage failed. Using local access.");
+        // Throw error to be caught by upload modal
+        throw new Error(`Cloud storage upload failed: ${errorMessage}`);
       }
     }
 
@@ -296,7 +298,9 @@ export default function App() {
     try {
       await setDoc(doc(db, 'videos', videoId), newVideo);
     } catch (e) {
-      console.warn("Firestore sync rejected upload. Storing in client metadata array.");
+      const errorMsg = e instanceof Error ? e.message : 'Unknown Firestore error';
+      console.warn("Firestore sync failed:", e);
+      throw new Error(`Firestore database error: ${errorMsg}`);
     }
 
     // Combine list
@@ -309,16 +313,21 @@ export default function App() {
     }
 
     // Log the ingest operation
-    await createAuditLog({
-      videoId: videoId,
-      videoName: newVideo.name,
-      userId: user?.uid || 'authorized-client',
-      userEmail: user?.email || 'auditor@vidi.io',
-      action: 'upload',
-      ipAddress: '192.168.1.185',
-      userAgent: navigator.userAgent,
-      classification: newVideo.classification
-    });
+    try {
+      await createAuditLog({
+        videoId: videoId,
+        videoName: newVideo.name,
+        userId: user?.uid || 'authorized-client',
+        userEmail: user?.email || 'auditor@vidi.io',
+        action: 'upload',
+        ipAddress: '192.168.1.185',
+        userAgent: navigator.userAgent,
+        classification: newVideo.classification
+      });
+    } catch (err) {
+      console.warn("Audit log creation failed:", err);
+      // Don't throw - audit logging failure shouldn't block upload
+    }
 
     // Fire automatic notifications toast!
     const newNotification: SharedNotification = {

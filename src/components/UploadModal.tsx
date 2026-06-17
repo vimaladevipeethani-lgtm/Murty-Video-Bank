@@ -32,7 +32,8 @@ export default function UploadModal({ onClose, onUploadSuccess }: UploadModalPro
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState<string>('0 MB/s');
   const [encryptionProgress, setEncryptionProgress] = useState(0);
-  const [statusText, setStatusText] = useState<'idle' | 'encrypting' | 'compressing' | 'syncing' | 'done'>('idle');
+  const [statusText, setStatusText] = useState<'idle' | 'encrypting' | 'compressing' | 'syncing' | 'uploading' | 'done' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,63 +77,73 @@ export default function UploadModal({ onClose, onUploadSuccess }: UploadModalPro
     if (!file) return;
 
     setUploading(true);
+    setErrorMessage(null);
     
-    // Step 1: Simulated Military-Grade AES-256 Encryption & Verification
-    if (isEncrypted) {
-      setStatusText('encrypting');
-      for (let p = 0; p <= 100; p += 10) {
-        setEncryptionProgress(p);
-        await new Promise(r => setTimeout(r, 60));
+    try {
+      // Step 1: Simulated Military-Grade AES-256 Encryption & Verification
+      if (isEncrypted) {
+        setStatusText('encrypting');
+        for (let p = 0; p <= 100; p += 10) {
+          setEncryptionProgress(p);
+          await new Promise(r => setTimeout(r, 60));
+        }
       }
+
+      // Step 2: Realistic compression calculations (simulated)
+      setStatusText('compressing');
+      await new Promise(r => setTimeout(r, 400));
+
+      // Step 3: Upload to cloud storage
+      setStatusText('uploading');
+      const totalSize = file.size;
+      const duration = 120; // Simulated video duration helper default
+      
+      // Simulate gradual upload speed with peak speed calculations
+      const uploadStep = async () => {
+        let progress = 0;
+        while (progress < 100) {
+          progress += Math.floor(Math.random() * 8) + 4;
+          if (progress > 100) progress = 100;
+          setUploadProgress(progress);
+          
+          // Speed calculation simulated based on container size
+          const mbps = (Math.random() * 12 + 8).toFixed(1);
+          setCurrentSpeed(`${mbps} MB/s`);
+          await new Promise(r => setTimeout(r, 120));
+        }
+      };
+
+      await uploadStep();
+      
+      setStatusText('done');
+      await new Promise(r => setTimeout(r, 300));
+
+      const finalExpiration = expirationOption === 'never' 
+        ? undefined 
+        : expirationOption === 'custom' 
+          ? customExpiration 
+          : parseInt(expirationOption, 10);
+
+      await onUploadSuccess({
+        name,
+        artist: artist || "Unknown Artist",
+        classification,
+        sizeBytes: totalSize,
+        durationSeconds: duration,
+        sharedWith,
+        expirationMinutes: finalExpiration,
+        isEncrypted
+      }, file);
+
+      setUploading(false);
+      // Success will close modal
+    } catch (error) {
+      setStatusText('error');
+      const errorMsg = error instanceof Error ? error.message : 'Unknown upload error occurred';
+      setErrorMessage(errorMsg);
+      setUploading(false);
+      console.error("Upload failed:", error);
     }
-
-    // Step 2: Realistic compression calculations (simulated)
-    setStatusText('compressing');
-    await new Promise(r => setTimeout(r, 400));
-
-    // Step 3: Realistic metadata Firestore sync & upload progress
-    setStatusText('syncing');
-    const totalSize = file.size;
-    const duration = 120; // Simulated video duration helper default
-    
-    // Simulate gradual upload speed with peak speed calculations
-    const uploadStep = async () => {
-      let progress = 0;
-      while (progress < 100) {
-        progress += Math.floor(Math.random() * 8) + 4;
-        if (progress > 100) progress = 100;
-        setUploadProgress(progress);
-        
-        // Speed calculation simulated based on container size
-        const mbps = (Math.random() * 12 + 8).toFixed(1);
-        setCurrentSpeed(`${mbps} MB/s`);
-        await new Promise(r => setTimeout(r, 120));
-      }
-    };
-
-    await uploadStep();
-    
-    setStatusText('done');
-    await new Promise(r => setTimeout(r, 300));
-
-    const finalExpiration = expirationOption === 'never' 
-      ? undefined 
-      : expirationOption === 'custom' 
-        ? customExpiration 
-        : parseInt(expirationOption, 10);
-
-    await onUploadSuccess({
-      name,
-      artist: artist || "Unknown Artist",
-      classification,
-      sizeBytes: totalSize,
-      durationSeconds: duration,
-      sharedWith,
-      expirationMinutes: finalExpiration,
-      isEncrypted
-    }, file);
-
-    setUploading(false);
   };
 
   const formatSize = (bytes: number) => {
@@ -390,12 +401,12 @@ export default function UploadModal({ onClose, onUploadSuccess }: UploadModalPro
                 </p>
               )}
 
-              {statusText === 'syncing' && (
+              {statusText === 'uploading' && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-emerald-400 font-medium flex items-center gap-1.5">
                       <Upload className="w-3.5 h-3.5 animate-bounce" />
-                      Uploading chunk payloads... ({currentSpeed})
+                      Uploading to cloud storage... ({currentSpeed})
                     </span>
                     <span className="font-mono text-slate-300">{uploadProgress}%</span>
                   </div>
@@ -413,6 +424,40 @@ export default function UploadModal({ onClose, onUploadSuccess }: UploadModalPro
                   ✅ Verification complete. Metadata indexed dynamically!
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Error message display */}
+          {errorMessage && (
+            <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="text-red-400 mt-0.5">⚠️</div>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-red-300 mb-1">Upload Failed</p>
+                  <p className="text-xs text-red-200">{errorMessage}</p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2 border-t border-red-900/30">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setStatusText('idle');
+                    setUploadProgress(0);
+                    setEncryptionProgress(0);
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded transition-colors"
+                >
+                  Try Again
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 
