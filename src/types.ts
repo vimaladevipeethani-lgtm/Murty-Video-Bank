@@ -24,7 +24,7 @@ export interface VideoMetadata {
   commentsCount: number;
   sharesCount: number;
   isEncrypted: boolean;
-  demoUrl?: string; // fallback preloaded sample
+  storageUrl?: string; // Firebase Storage download URL for cloud video access
 }
 
 export interface Comment {

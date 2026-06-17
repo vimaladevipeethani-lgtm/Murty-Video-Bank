@@ -23,6 +23,14 @@ import {
   onSnapshot,
   getDocFromServer
 } from 'firebase/firestore';
+import { 
+  getStorage, 
+  ref, 
+  uploadBytes, 
+  getBytes, 
+  deleteObject,
+  getDownloadURL
+} from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AccessLog } from '../types';
 
@@ -31,6 +39,7 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: Required database mapping */
 export const auth = getAuth();
 export const googleProvider = new GoogleAuthProvider();
+export const storage = getStorage(app);
 
 // Error diagnostic helper as specified in guidelines
 export enum OperationType {
@@ -103,5 +112,38 @@ export async function createAuditLog(log: Omit<AccessLog, 'id' | 'timestamp'>) {
     const localLogs = JSON.parse(localStorage.getItem('vidi_vault_local_logs') || '[]');
     localLogs.unshift(completeLog);
     localStorage.setItem('vidi_vault_local_logs', JSON.stringify(localLogs.slice(0, 100)));
+  }
+}
+
+// Firebase Storage functions for permanent cloud video storage
+export async function uploadVideoToStorage(videoId: string, blob: Blob): Promise<string> {
+  try {
+    const videoRef = ref(storage, `videos/${videoId}`);
+    await uploadBytes(videoRef, blob);
+    const downloadUrl = await getDownloadURL(videoRef);
+    return downloadUrl;
+  } catch (error) {
+    console.error("Firebase Storage upload failed:", error);
+    throw new Error(`Failed to upload video to cloud storage: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function downloadVideoFromStorage(videoId: string): Promise<Blob | null> {
+  try {
+    const videoRef = ref(storage, `videos/${videoId}`);
+    const blob = await getBytes(videoRef);
+    return blob;
+  } catch (error) {
+    console.error("Firebase Storage download failed:", error);
+    return null;
+  }
+}
+
+export async function deleteVideoFromStorage(videoId: string): Promise<void> {
+  try {
+    const videoRef = ref(storage, `videos/${videoId}`);
+    await deleteObject(videoRef);
+  } catch (error) {
+    console.error("Firebase Storage delete failed:", error);
   }
 }

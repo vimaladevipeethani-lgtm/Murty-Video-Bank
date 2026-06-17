@@ -76,19 +76,11 @@ export default function App() {
 
   // Load baseline uploaded videos when starting
   useEffect(() => {
-    // Load only uploaded metadata from localStorage
-    const localUploadedStr = localStorage.getItem('vidi_vault_uploaded_metadata') || '[]';
-    const localUploaded: VideoMetadata[] = JSON.parse(localUploadedStr);
-    
-    // Use only uploaded videos (no demo videos)
-    setVideos(localUploaded);
+    // Load only uploaded metadata from Firestore (cloud-first)
+    // localStorage is no longer used for video persistence
+    setVideos([]);
 
-    // Default select the first video
-    if (localUploaded.length > 0) {
-      handleSelectVideo(localUploaded[0]);
-    }
-
-    // Load likes from localStorage
+    // Load likes from localStorage (local preference)
     const savedLikes = localStorage.getItem('vidi_vault_likes') || '{}';
     setLikes(JSON.parse(savedLikes));
 
@@ -193,18 +185,23 @@ export default function App() {
       classification: video.classification
     });
 
-    // Retrieve blob securely from IndexedDB for uploaded videos
-    try {
-      const blob = await getVideoBlob(video.id);
-      if (blob) {
-        const localUrl = URL.createObjectURL(blob);
-        setActiveVideoUrl(localUrl);
-      } else {
+    // Retrieve video URL from Firebase Storage (cloud-first approach)
+    if (video.storageUrl) {
+      setActiveVideoUrl(video.storageUrl);
+    } else {
+      // Fallback: try to fetch from cloud storage
+      try {
+        const blob = await getVideoBlob(video.id);
+        if (blob) {
+          const localUrl = URL.createObjectURL(blob);
+          setActiveVideoUrl(localUrl);
+        } else {
+          setActiveVideoUrl(null);
+        }
+      } catch (err) {
+        console.error("Video retrieval failed:", err);
         setActiveVideoUrl(null);
       }
-    } catch (err) {
-      console.error("IndexedDB blob failed:", err);
-      setActiveVideoUrl(null);
     }
   };
 
@@ -271,6 +268,19 @@ export default function App() {
   // Video Upload meta ingestion
   const handleUploadSuccess = async (meta: Omit<VideoMetadata, 'id' | 'createdAt' | 'ownerId' | 'likesCount' | 'commentsCount' | 'sharesCount'>, file?: File) => {
     const videoId = `vid-${Date.now()}`;
+    let storageUrl: string | undefined;
+
+    // Upload video file to Firebase Storage
+    if (file) {
+      try {
+        storageUrl = await storeVideoBlob(videoId, file);
+        console.log("Video uploaded to Firebase Storage:", storageUrl);
+      } catch (err) {
+        console.error("Failed to upload video to cloud storage:", err);
+        triggerToast("Warning: Video uploaded but cloud storage failed. Using local access.");
+      }
+    }
+
     const newVideo: VideoMetadata = {
       ...meta,
       id: videoId,
@@ -278,31 +288,23 @@ export default function App() {
       ownerId: user?.uid || 'system',
       likesCount: 0,
       commentsCount: 0,
-      sharesCount: 0
+      sharesCount: 0,
+      storageUrl // Add cloud storage URL to metadata
     };
 
-    // Store binary payload locally in browser up to 10GB capacity
-    if (file) {
-      await storeVideoBlob(videoId, file);
-    }
-
-    // Save metadata in Firestore
+    // Save metadata with storage URL in Firestore
     try {
       await setDoc(doc(db, 'videos', videoId), newVideo);
     } catch (e) {
       console.warn("Firestore sync rejected upload. Storing in client metadata array.");
     }
 
-    // fallback local list array
-    const uploadedStr = localStorage.getItem('vidi_vault_uploaded_metadata') || '[]';
-    const uploadedArr = JSON.parse(uploadedStr);
-    uploadedArr.unshift(newVideo);
-    localStorage.setItem('vidi_vault_uploaded_metadata', JSON.stringify(uploadedArr));
-
     // Combine list
     setVideos(prev => [newVideo, ...prev]);
     setSelectedVideo(newVideo);
-    if (file) {
+    if (storageUrl) {
+      setActiveVideoUrl(storageUrl);
+    } else if (file) {
       setActiveVideoUrl(URL.createObjectURL(file));
     }
 
