@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud_firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Check if user is authenticated with a verified email or the custom bootstrapped admin
+    function isVerifiedUser() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true || 
+        request.auth.token.email == "ravirajapeethani123@gmail.com"
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "pbmmurty79@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 2. Collection Rules
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isVerifiedUser() && userId == request.auth.uid && 
+        incoming().uid == request.auth.uid && 
+        incoming().email == request.auth.token.email &&
+        // Forbid self-assigning admin role unless they already meet admin criteria
+        (incoming().role == "user" || request.auth.token.email == "pbmmurty79@gmail.com");
+      
+      allow update: if isVerifiedUser() && userId == request.auth.uid &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        // Prevent escalating to admin role unless already an admin
+        (incoming().role == existing().role || isAdmin());
+        
+      allow delete: if isAdmin();
+    }
+
+    // Validation helper for Videos
+    function isValidVideo(video) {
+      return video.id is string && video.id.size() <= 128 &&
+             video.name is string && video.name.size() <= 200 &&
+             video.artist is string && video.artist.size() <= 200 &&
+             video.classification in ["Classical", "Mass", "Educational", "Comedy", "Tragedy", "Devotional"] &&
+             video.sizeBytes is int && video.sizeBytes >= 0 &&
+             video.ownerId == request.auth.uid;
+    }
+
+    // Videos Collection
+    match /videos/{videoId} {
+      allow get: if isSignedIn() && isValidId(videoId);
+      allow list: if isSignedIn();
+      
+      allow create: if isVerifiedUser() && isValidId(videoId) && 
+        isValidVideo(incoming()) && 
+        (isAdmin() || request.auth.token.email == "pbmmurty79@gmail.com");
+      
+      allow update: if isVerifiedUser() && isValidId(videoId) && (
+        // Admin update
+        (isAdmin() && isValidVideo(incoming())) ||
+        // User update for counters (Likes / Comments)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'sharesCount']))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    // Comments Collection
+    match /comments/{commentId} {
+      allow get: if isSignedIn() && isValidId(commentId);
+      allow list: if isSignedIn();
+      
+      allow create: if isVerifiedUser() && isValidId(commentId) &&
+        incoming().id == commentId &&
+        incoming().userId == request.auth.uid &&
+        incoming().userName is string &&
+        incoming().text is string && incoming().text.size() <= 5000;
+        
+      allow update: if isVerifiedUser() && isValidId(commentId) &&
+        existing().userId == request.auth.uid &&
+        incoming().userId == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['text']);
+        
+      allow delete: if isVerifiedUser() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Likes Collection
+    match /likes/{likeId} {
+      allow get: if isSignedIn() && isValidId(likeId);
+      allow list: if isSignedIn();
+      
+      allow create: if isVerifiedUser() && isValidId(likeId) &&
+        incoming().id == likeId &&
+        incoming().userId == request.auth.uid;
+        
+      allow delete: if isVerifiedUser() && existing().userId == request.auth.uid;
+    }
+
+    // Access Logs Collection
+    match /logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      
+      allow create: if isVerifiedUser() && isValidId(logId) &&
+        incoming().id == logId &&
+        incoming().userId == request.auth.uid &&
+        incoming().userEmail == request.auth.token.email &&
+        incoming().action in ["view", "play", "download", "share", "upload", "delete"];
+        
+      allow update: if false; // Logs are write-once/immutable for compliance
+      allow delete: if isAdmin();
+    }
+
+    // Notifications Collection
+    match /notifications/{id} {
+      allow get: if isSignedIn() && isValidId(id);
+      allow list: if isSignedIn();
+      
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

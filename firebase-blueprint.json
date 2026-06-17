@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User role and authentication settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "mfaEnabled": { "type": "boolean" },
+        "mfaSecret": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "Video upload metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "artist": { "type": "string" },
+        "classification": { "type": "string", "enum": ["Classical", "Mass", "Educational", "Comedy", "Tragedy", "Devotional"] },
+        "sizeBytes": { "type": "integer" },
+        "durationSeconds": { "type": "integer" },
+        "createdAt": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "sharedWith": { "type": "string", "enum": ["public", "private"] },
+        "expirationMinutes": { "type": "integer" },
+        "likesCount": { "type": "integer" },
+        "commentsCount": { "type": "integer" }
+      },
+      "required": ["id", "name", "artist", "classification", "sizeBytes", "createdAt", "ownerId"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Video comments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "videoId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "videoId", "userId", "userName", "text", "createdAt"]
+    },
+    "Like": {
+      "title": "Like",
+      "description": "Video likes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "videoId": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "videoId", "userId", "createdAt"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Granular video access log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "videoId": { "type": "string" },
+        "videoName": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "ipAddress": { "type": "string" }
+      },
+      "required": ["id", "videoId", "videoName", "userId", "userEmail", "action", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Folder and share update notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "title", "body", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Collection of signed-up users and roles"
+    },
+    "videos": {
+      "schema": "Video",
+      "description": "Securely uploaded private videos"
+    },
+    "comments": {
+      "schema": "Comment",
+      "description": "User replies on videos"
+    },
+    "likes": {
+      "schema": "Like",
+      "description": "Video reaction likes list"
+    },
+    "logs": {
+      "schema": "Log",
+      "description": "Granular audit logs of file interactions"
+    },
+    "notifications": {
+      "schema": "Notification",
+      "description": "System-wide updates on folder shares and new records"
+    }
+  }
+}

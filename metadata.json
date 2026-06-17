@@ -1,0 +1,6 @@
+{
+  "name": "Private Video Repository",
+  "description": "Secure private video sharing framework with access control, authentication, and detailed usage logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
