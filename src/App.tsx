@@ -26,7 +26,7 @@ import {
   increment
 } from 'firebase/firestore';
 import { ClassificationType, VideoMetadata, Comment, AccessLog, SharedNotification } from './types';
-import { DEMO_VIDEOS, storeVideoBlob, getVideoBlob, deleteVideoBlob } from './lib/videoStorage';
+import { storeVideoBlob, getVideoBlob, deleteVideoBlob } from './lib/videoStorage';
 import UploadModal from './components/UploadModal';
 import MfaModal from './components/MfaModal';
 import AdminPanel from './components/AdminPanel';
@@ -74,47 +74,29 @@ export default function App() {
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [toastNotification, setToastNotification] = useState<string | null>(null);
 
-  // Load baseline demo videos when starting
+  // Load baseline uploaded videos when starting
   useEffect(() => {
-    // Sync default demo videos to state
+    // Load only uploaded metadata from localStorage
     const localUploadedStr = localStorage.getItem('vidi_vault_uploaded_metadata') || '[]';
     const localUploaded: VideoMetadata[] = JSON.parse(localUploadedStr);
     
-    // Combine preset demo content with custom metadata
-    const parsedVideos = [...DEMO_VIDEOS, ...localUploaded];
-    setVideos(parsedVideos);
+    // Use only uploaded videos (no demo videos)
+    setVideos(localUploaded);
 
     // Default select the first video
-    if (parsedVideos.length > 0) {
-      handleSelectVideo(parsedVideos[0]);
+    if (localUploaded.length > 0) {
+      handleSelectVideo(localUploaded[0]);
     }
 
     // Load likes from localStorage
     const savedLikes = localStorage.getItem('vidi_vault_likes') || '{}';
     setLikes(JSON.parse(savedLikes));
 
-    // Listen to mock comments in local storage
+    // Listen to comments in local storage
     const savedComments = localStorage.getItem('vidi_vault_comments') || '[]';
     if (!localStorage.getItem('vidi_vault_comments')) {
-      const defaultComments: Comment[] = [
-        {
-          id: 'c1',
-          videoId: 'demo-bunny',
-          userId: 'mock-user-1',
-          userName: 'Dr. Evelyn Carter',
-          text: 'The transmission of this file was extremely fast. Decryption completed in 800ms.',
-          createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
-        },
-        {
-          id: 'c2',
-          videoId: 'demo-bunny',
-          userId: 'mock-user-2',
-          userName: 'Compliance Engineer',
-          text: 'AES key rotation is successfully active for this node.',
-          createdAt: new Date(Date.now() - 3600000).toISOString()
-        }
-      ];
-      localStorage.setItem('vidi_vault_comments', JSON.stringify(defaultComments));
+      // Start with empty comments array - no demo video comments
+      localStorage.setItem('vidi_vault_comments', JSON.stringify([]));
     }
 
     // Load initial virtual notifications
@@ -135,13 +117,8 @@ export default function App() {
     const unsubscribeVideos = onSnapshot(collection(db, 'videos'), (snapshot) => {
       const dbVids = snapshot.docs.map(doc => doc.data() as VideoMetadata);
       if (dbVids.length > 0) {
-        // filter duplicates out from DEMO_VIDEOS
-        const customUploader = dbVids;
-        setVideos(prev => {
-          const combined = [...DEMO_VIDEOS, ...customUploader];
-          const unique = combined.filter((v, idx, self) => self.findIndex(t => t.id === v.id) === idx);
-          return unique;
-        });
+        // Use only uploaded videos from Firestore
+        setVideos(dbVids);
       }
     }, (err) => console.warn("Firestore videos snapshot denied/offline, relying on local state."));
 
@@ -216,22 +193,18 @@ export default function App() {
       classification: video.classification
     });
 
-    if (video.id.startsWith('demo-')) {
-      setActiveVideoUrl(video.demoUrl || null);
-    } else {
-      // Retrive blob securely from IndexedDB
-      try {
-        const blob = await getVideoBlob(video.id);
-        if (blob) {
-          const localUrl = URL.createObjectURL(blob);
-          setActiveVideoUrl(localUrl);
-        } else {
-          setActiveVideoUrl(null);
-        }
-      } catch (err) {
-        console.error("IndexedDB blob failed:", err);
+    // Retrieve blob securely from IndexedDB for uploaded videos
+    try {
+      const blob = await getVideoBlob(video.id);
+      if (blob) {
+        const localUrl = URL.createObjectURL(blob);
+        setActiveVideoUrl(localUrl);
+      } else {
         setActiveVideoUrl(null);
       }
+    } catch (err) {
+      console.error("IndexedDB blob failed:", err);
+      setActiveVideoUrl(null);
     }
   };
 
